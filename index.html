@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>🌭 Wiener Wednesday</title>
+
+<style>
+body{
+  margin:0;
+  overflow:hidden;
+  font-family:Arial,sans-serif;
+  background:#87ceeb;
+  user-select:none;
+}
+
+canvas{
+  display:block;
+  touch-action:none;
+}
+
+#ui,#msg,#help{
+  position:fixed;
+  left:15px;
+  color:white;
+  font-weight:bold;
+  text-shadow:3px 3px 0 #000;
+  z-index:10;
+}
+
+#ui{
+  top:15px;
+  font-size:28px;
+}
+
+#msg{
+  top:70px;
+  font-size:28px;
+  color:yellow;
+}
+
+#help{
+  bottom:15px;
+  font-size:20px;
+}
+
+#resetBtn{
+  position:fixed;
+  right:15px;
+  top:15px;
+  z-index:20;
+  font-size:22px;
+  padding:10px 18px;
+  border-radius:12px;
+  border:3px solid #000;
+  background:#ffcc00;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.screen{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.82);
+  z-index:50;
+  color:white;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  text-align:center;
+  padding:20px;
+}
+
+.screen h1{
+  font-size:72px;
+  margin:0;
+  text-shadow:5px 5px 0 #000;
+}
+
+.screen h2{
+  font-size:42px;
+  margin:10px;
+}
+
+.screen p{
+  font-size:24px;
+  max-width:760px;
+}
+
+.brand{
+  font-size:22px;
+  color:#ffcc00;
+  margin-bottom:15px;
+  text-shadow:3px 3px 0 #000;
+}
+
+.bigBtn{
+  font-size:30px;
+  padding:18px 36px;
+  border-radius:18px;
+  border:4px solid #000;
+  background:#ffcc00;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.bigBtn:hover{
+  background:#ff9900;
+}
+</style>
+</head>
+
+<body>
+
+<div id="startScreen" class="screen">
+  <div class="brand">Rare Ink Studios presents</div>
+  <h1>🌭 WIENER WEDNESDAY</h1>
+  <p>The world’s most unnecessary game.</p>
+  <p>Drag down-left. Release. Yeet the wiener into the bun. Avoid the sky rat.</p>
+  <button class="bigBtn" onclick="startGame()">START YEETING</button>
+</div>
+
+<div id="endScreen" class="screen" style="display:none">
+  <div class="brand">Rare Ink Studios presents</div>
+  <h1>GAME OVER 🌭</h1>
+  <h2 id="finalScore">Score: 0</h2>
+  <p id="rankText">Fresh glizzy energy.</p>
+  <button class="bigBtn" onclick="startGame()">PLAY AGAIN</button>
+</div>
+
+<div id="ui">
+  🌭 Score: <span id="score">0</span>
+  |
+  ⏱️ Time: <span id="time">60</span>
+</div>
+
+<div id="msg">Press START YEETING</div>
+
+<div id="help">
+  Wiener Wednesday Release Build | Sound ON
+</div>
+
+<button id="resetBtn" onclick="hardReset('Manual reset. Fresh glizzy.')">
+RESET
+</button>
+
+<canvas id="game"></canvas>
+
+<script>
+let audioContext=null;
+
+function getAudioContext(){
+  if(!audioContext){
+    audioContext=new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return audioContext;
+}
+
+function playTone(frequency,duration,type,volume){
+  const audio=getAudioContext();
+  const oscillator=audio.createOscillator();
+  const gain=audio.createGain();
+
+  oscillator.type=type;
+  oscillator.frequency.value=frequency;
+
+  gain.gain.value=volume;
+
+  oscillator.connect(gain);
+  gain.connect(audio.destination);
+
+  oscillator.start();
+
+  gain.gain.exponentialRampToValueAtTime(
+    0.001,
+    audio.currentTime+duration
+  );
+
+  oscillator.stop(audio.currentTime+duration);
+}
+
+function playYeetSound(){
+  playTone(180,.10,"sawtooth",.25);
+  setTimeout(()=>playTone(320,.10,"sawtooth",.22),70);
+  setTimeout(()=>playTone(520,.08,"sawtooth",.18),140);
+}
+
+function playScoreSound(){
+  playTone(600,.08,"square",.20);
+  setTimeout(()=>playTone(900,.10,"square",.18),80);
+  setTimeout(()=>playTone(1200,.08,"square",.14),150);
+}
+
+function playBirdSound(){
+  playTone(900,.07,"square",.18);
+  setTimeout(()=>playTone(500,.10,"square",.18),80);
+  setTimeout(()=>playTone(300,.12,"square",.15),160);
+}
+
+function playStartSound(){
+  playTone(400,.08,"triangle",.18);
+  setTimeout(()=>playTone(650,.10,"triangle",.18),90);
+}
+
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+const scoreText=document.getElementById("score");
+const timeText=document.getElementById("time");
+const msg=document.getElementById("msg");
+const startScreen=document.getElementById("startScreen");
+const endScreen=document.getElementById("endScreen");
+const finalScore=document.getElementById("finalScore");
+const rankText=document.getElementById("rankText");
+
+canvas.width=innerWidth;
+canvas.height=innerHeight;
+
+let score=0;
+let timeLeft=60;
+let timer=null;
+
+let dragging=false;
+let launched=false;
+let grabbed=false;
+let gameActive=false;
+
+let launchTime=0;
+let screenShake=0;
+let canGrabDog=true;
+
+const gravity=.38;
+
+const start={
+  x:300,
+  y:canvas.height-180
+};
+
+const dog={
+  x:start.x,
+  y:start.y,
+  w:120,
+  h:44,
+  vx:0,
+  vy:0,
+  rot:0
+};
+
+const bun={
+  x:canvas.width-360,
+  y:canvas.height-220,
+  w:270,
+  h:120,
+  dir:1
+};
+
+const bird={
+  x:canvas.width+240,
+  y:150,
+  vx:-8,
+  vy:0,
+  active:false
+};
+
+const winMessages=[
+  "GLIZZY LANDED 🌭🔥",
+  "ABSOLUTE WIENER CONTROL",
+  "CERTIFIED GLIZZY GAMER",
+  "THAT DOG IS COOKIN",
+  "ELITE YEET",
+  "BUN ACCEPTED THE OFFER"
+];
+
+function floor(){
+  return canvas.height-100;
+}
+
+function dangerLine(){
+  return floor()-75;
+}
+
+function clamp(value,min,max){
+  return Math.max(min,Math.min(max,value));
+}
+
+function randomWinMessage(){
+  return winMessages[
+    Math.floor(Math.random()*winMessages.length)
+  ];
+}
+
+function startGame(){
+  playStartSound();
+
+  score=0;
+  timeLeft=60;
+
+  scoreText.textContent=score;
+  timeText.textContent=timeLeft;
+
+  startScreen.style.display="none";
+  endScreen.style.display="none";
+
+  gameActive=true;
+
+  hardReset("Drag DOWN and LEFT, then release!");
+
+  clearInterval(timer);
+
+  timer=setInterval(()=>{
+    timeLeft--;
+    timeText.textContent=timeLeft;
+
+    if(timeLeft<=0){
+      endGame();
+    }
+  },1000);
+}
+
+function endGame(){
+  gameActive=false;
+  clearInterval(timer);
+
+  finalScore.textContent="Score: "+score;
+
+  if(score>=15){
+    rankText.textContent="Legendary glizzy goblin.";
+  }
+  else if(score>=10){
+    rankText.textContent="Elite Wiener Wednesday warrior.";
+  }
+  else if(score>=5){
+    rankText.textContent="Certified hot dog handler.";
+  }
+  else if(score>=1){
+    rankText.textContent="Respectable glizzy effort.";
+  }
+  else{
+    rankText.textContent="The bun remains disappointed.";
+  }
+
+  endScreen.style.display="flex";
+}
+
+function hardReset(text){
+  dog.x=start.x;
+  dog.y=start.y;
+
+  dog.vx=0;
+  dog.vy=0;
+  dog.rot=0;
+
+  dragging=false;
+  launched=false;
+  grabbed=false;
+  canGrabDog=false;
+
+  setTimeout(()=>{
+    canGrabDog=true;
+  },200);
+
+  bird.x=canvas.width+240;
+  bird.y=120+Math.random()*170;
+
+  bird.vx=-8;
+  bird.vy=0;
+  bird.active=false;
+
+  msg.textContent=text || "Drag DOWN and LEFT, then release!";
+}
+
+function round(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.roundRect(x,y,w,h,r);
+  ctx.fill();
+  ctx.stroke();
+}
+
+function background(){
+  ctx.fillStyle="#86d7ff";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  ctx.fillStyle="#ffd34d";
+
+  ctx.beginPath();
+  ctx.arc(canvas.width-120,95,60,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="#55aa44";
+  ctx.fillRect(0,floor(),canvas.width,100);
+
+  ctx.strokeStyle="rgba(255,0,0,.5)";
+  ctx.lineWidth=4;
+
+  ctx.setLineDash([16,12]);
+
+  ctx.beginPath();
+  ctx.moveTo(0,dangerLine());
+  ctx.lineTo(canvas.width,dangerLine());
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+
+  ctx.fillStyle="rgba(255,0,0,.85)";
+  ctx.font="20px Arial";
+
+  ctx.fillText(
+    "BIRD STEAL ZONE",
+    canvas.width-230,
+    dangerLine()-10
+  );
+
+  ctx.fillStyle="#6d4c2f";
+
+  ctx.fillRect(210,floor()-45,180,25);
+  ctx.fillRect(230,floor()-20,15,45);
+  ctx.fillRect(355,floor()-20,15,45);
+
+  ctx.font="40px Arial";
+  ctx.fillText("🔥",275,floor()-50);
+}
+
+function drawDog(){
+  ctx.save();
+
+  ctx.translate(dog.x,dog.y);
+  ctx.rotate(dog.rot);
+
+  ctx.lineWidth=4;
+  ctx.strokeStyle="black";
+
+  ctx.fillStyle="#e7b76f";
+  round(-70,-18,140,44,25);
+
+  ctx.fillStyle="#b84a28";
+  round(-58,-22,116,44,25);
+
+  ctx.strokeStyle="#ffd21f";
+  ctx.lineWidth=5;
+
+  ctx.beginPath();
+
+  ctx.moveTo(-42,-5);
+
+  ctx.bezierCurveTo(-25,-20,-10,10,5,-5);
+  ctx.bezierCurveTo(20,-20,35,10,48,-5);
+
+  ctx.stroke();
+
+  ctx.fillStyle="white";
+
+  ctx.beginPath();
+  ctx.arc(-20,-6,9,0,Math.PI*2);
+  ctx.arc(20,-6,9,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="black";
+
+  ctx.beginPath();
+  ctx.arc(-18,-5,4,0,Math.PI*2);
+  ctx.arc(22,-5,4,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.strokeStyle="black";
+  ctx.lineWidth=3;
+
+  ctx.beginPath();
+
+  if(grabbed){
+    ctx.arc(0,16,15,Math.PI,Math.PI*2);
+  }
+  else{
+    ctx.arc(0,8,18,0,Math.PI);
+  }
+
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBun(){
+  ctx.lineWidth=5;
+  ctx.strokeStyle="black";
+
+  ctx.fillStyle="#f2c06b";
+  round(bun.x,bun.y,bun.w,bun.h,45);
+
+  ctx.fillStyle="#b84a28";
+  round(bun.x+45,bun.y+45,bun.w-90,30,22);
+
+  ctx.fillStyle="white";
+  ctx.font="27px Arial";
+
+  ctx.fillText(
+    "LAND HERE",
+    bun.x+65,
+    bun.y-15
+  );
+}
+
+function drawBird(){
+  ctx.font="68px Arial";
+
+  ctx.fillText("🐦",bird.x,bird.y);
+
+  if(bird.active){
+    ctx.fillStyle="white";
+    ctx.font="22px Arial";
+
+    ctx.fillText(
+      "MINE?",
+      bird.x-15,
+      bird.y-48
+    );
+  }
+}
+
+function drawAim(){
+  if(!dragging){
+    return;
+  }
+
+  ctx.strokeStyle="white";
+  ctx.lineWidth=6;
+
+  ctx.beginPath();
+  ctx.moveTo(start.x,start.y);
+  ctx.lineTo(dog.x,dog.y);
+  ctx.stroke();
+
+  const pullX=start.x-dog.x;
+  const pullY=start.y-dog.y;
+
+  const pull=Math.sqrt(
+    pullX*pullX+
+    pullY*pullY
+  );
+
+  const power=Math.min(
+    100,
+    Math.floor(pull/1.7)
+  );
+
+  ctx.fillStyle="black";
+  ctx.fillRect(25,110,230,34);
+
+  ctx.fillStyle="white";
+  ctx.fillRect(30,115,220,24);
+
+  ctx.fillStyle="#ffcc00";
+  ctx.fillRect(30,115,power*2.2,24);
+
+  ctx.fillStyle="white";
+  ctx.font="24px Arial";
+
+  ctx.fillText("POWER "+power+"%",30,102);
+  ctx.fillText("RELEASE!",dog.x-55,dog.y-55);
+}
+
+function updateBun(){
+  bun.x+=bun.dir*1.4;
+
+  if(
+    bun.x<canvas.width-630 ||
+    bun.x>canvas.width-300
+  ){
+    bun.dir*=-1;
+  }
+}
+
+function updateBird(){
+  if(launched && !grabbed){
+    bird.active=true;
+  }
+
+  if(bird.active && !grabbed){
+    bird.vx+=(dog.x+10-bird.x)*0.004;
+    bird.vy+=(dog.y-5-bird.y)*0.004;
+
+    bird.vx=clamp(bird.vx,-11,4);
+    bird.vy=clamp(bird.vy,-7,7);
+  }
+
+  bird.x+=bird.vx;
+  bird.y+=bird.vy;
+
+  if(bird.x<-220){
+    bird.x=canvas.width+240;
+    bird.y=120+Math.random()*170;
+
+    bird.vx=-8;
+    bird.vy=0;
+
+    bird.active=false;
+  }
+
+  const dx=dog.x-bird.x;
+  const dy=dog.y-bird.y;
+
+  const dist=Math.sqrt(dx*dx+dy*dy);
+
+  if(
+    launched &&
+    !grabbed &&
+    dog.y<dangerLine() &&
+    dist<110
+  ){
+    grabbed=true;
+
+    msg.textContent="BIRD STOLE YOUR WIENER 🐦🌭";
+
+    playBirdSound();
+
+    setTimeout(()=>{
+      hardReset("Sky rat victory. Try again.");
+    },600);
+  }
+}
+
+function updateDog(){
+  if(grabbed){
+    dog.x=bird.x+15;
+    dog.y=bird.y+42;
+
+    dog.rot+=.25;
+
+    return;
+  }
+
+  if(!launched){
+    return;
+  }
+
+  dog.vy+=gravity;
+
+  dog.x+=dog.vx;
+  dog.y+=dog.vy;
+
+  dog.rot+=.13;
+
+  if(dog.y+dog.h/2>floor()){
+    dog.y=floor()-dog.h/2;
+
+    dog.vy*=-.35;
+    dog.vx*=.68;
+
+    if(
+      Math.abs(dog.vx)<.9 &&
+      Math.abs(dog.vy)<1.6
+    ){
+      setTimeout(()=>{
+        hardReset("Floor dog. Tragic.");
+      },160);
+    }
+  }
+
+  if(
+    dog.x>bun.x &&
+    dog.x<bun.x+bun.w &&
+    dog.y>bun.y &&
+    dog.y<bun.y+bun.h
+  ){
+    score++;
+
+    scoreText.textContent=score;
+
+    msg.textContent=randomWinMessage();
+
+    playScoreSound();
+
+    screenShake=12;
+
+    setTimeout(()=>{
+      hardReset("Drag DOWN and LEFT, then release!");
+    },180);
+  }
+
+  if(Date.now()-launchTime>4500){
+    hardReset("Timeout reset. Try again.");
+  }
+
+  if(
+    dog.x<-300 ||
+    dog.x>canvas.width+300 ||
+    dog.y<-350 ||
+    dog.y>canvas.height+300
+  ){
+    hardReset("Lost to the void.");
+  }
+}
+
+function loop(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  let shaking=false;
+
+  if(screenShake>0){
+    shaking=true;
+
+    ctx.save();
+
+    ctx.translate(
+      (Math.random()-0.5)*screenShake,
+      (Math.random()-0.5)*screenShake
+    );
+
+    screenShake*=0.85;
+
+    if(screenShake<0.3){
+      screenShake=0;
+    }
+  }
+
+  background();
+  drawBun();
+  drawBird();
+  drawAim();
+  drawDog();
+
+  if(shaking){
+    ctx.restore();
+  }
+
+  if(gameActive){
+    updateBun();
+    updateBird();
+    updateDog();
+  }
+
+  requestAnimationFrame(loop);
+}
+
+canvas.addEventListener("pointerdown",e=>{
+  if(!gameActive){
+    return;
+  }
+
+  if(!canGrabDog){
+    return;
+  }
+
+  const dx=e.clientX-dog.x;
+  const dy=e.clientY-dog.y;
+
+  if(
+    Math.sqrt(dx*dx+dy*dy)<95 &&
+    !launched &&
+    !grabbed
+  ){
+    dragging=true;
+
+    canvas.setPointerCapture(e.pointerId);
+
+    msg.textContent="Pull DOWN and LEFT!";
+  }
+});
+
+canvas.addEventListener("pointermove",e=>{
+  if(!dragging){
+    return;
+  }
+
+  let dx=e.clientX-start.x;
+  let dy=e.clientY-start.y;
+
+  const max=170;
+
+  const dist=Math.sqrt(dx*dx+dy*dy);
+
+  if(dist>max){
+    const angle=Math.atan2(dy,dx);
+
+    dx=Math.cos(angle)*max;
+    dy=Math.sin(angle)*max;
+  }
+
+  dog.x=start.x+dx;
+  dog.y=start.y+dy;
+});
+
+canvas.addEventListener("pointerup",e=>{
+  if(!dragging){
+    return;
+  }
+
+  dragging=false;
+  launched=true;
+
+  launchTime=Date.now();
+
+  const pullX=start.x-dog.x;
+  const pullY=start.y-dog.y;
+
+  const pull=Math.sqrt(
+    pullX*pullX+
+    pullY*pullY
+  );
+
+  if(pull<30){
+    hardReset("Not enough YEET.");
+    return;
+  }
+
+  dog.vx=pullX*.20;
+  dog.vy=pullY*.205;
+
+  msg.textContent="YEEEEET!";
+
+  playYeetSound();
+});
+
+window.addEventListener("resize",()=>{
+  canvas.width=innerWidth;
+  canvas.height=innerHeight;
+
+  start.y=canvas.height-180;
+
+  bun.x=canvas.width-360;
+  bun.y=canvas.height-220;
+
+  hardReset();
+});
+
+loop();
+</script>
+
+</body>
+</html>
