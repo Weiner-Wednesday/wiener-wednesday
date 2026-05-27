@@ -222,7 +222,7 @@
       position: absolute;
       z-index: 12;
       left: 50%;
-      bottom: max(8px, env(safe-area-inset-bottom));
+      bottom: max(10px, env(safe-area-inset-bottom));
       transform: translateX(-50%);
       width: min(98vw, 1060px);
       max-height: 39vh;
@@ -230,11 +230,12 @@
       grid-template-columns: repeat(7, 1fr);
       gap: 7px;
       padding: 8px;
-      background: rgba(0, 0, 0, 0.50);
-      border: 2px solid rgba(255, 216, 74, 0.86);
+      background: rgba(0, 0, 0, 0.56);
+      border: 2px solid rgba(255, 216, 74, 0.92);
       border-radius: 18px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.45);
       -webkit-overflow-scrolling: touch;
+      touch-action: manipulation;
     }
 
     .topBtn {
@@ -247,6 +248,7 @@
       justify-content: center;
       background: linear-gradient(#fffdf0, #ffc949);
       overflow: hidden;
+      touch-action: manipulation;
     }
 
     .topBtn img {
@@ -267,7 +269,15 @@
     @media (max-width: 900px) {
       #toppingBar {
         grid-template-columns: repeat(5, 1fr);
-        max-height: 40vh;
+        max-height: min(32dvh, 230px);
+        width: min(96vw, 760px);
+        gap: 6px;
+        padding: 7px;
+      }
+
+      .topBtn {
+        min-height: 54px;
+        border-radius: 15px;
       }
     }
 
@@ -293,13 +303,23 @@
       }
 
       #toppingBar {
-        grid-template-columns: repeat(4, 1fr);
-        gap: 6px;
-        max-height: 42vh;
+        grid-template-columns: repeat(5, 1fr);
+        bottom: max(82px, calc(env(safe-area-inset-bottom) + 72px));
+        max-height: min(31dvh, 220px);
+        gap: 5px;
+        padding: 6px;
+        border-radius: 16px;
       }
 
       .topBtn {
-        min-height: 48px;
+        min-height: 50px;
+        padding: 3px;
+        border-radius: 14px;
+      }
+
+      .topBtn img {
+        width: 92%;
+        height: 92%;
       }
 
       #message {
@@ -315,12 +335,13 @@
 
     @media (max-width: 430px) {
       #toppingBar {
-        grid-template-columns: repeat(3, 1fr);
-        max-height: 41vh;
+        grid-template-columns: repeat(5, 1fr);
+        max-height: 214px;
+        bottom: max(86px, calc(env(safe-area-inset-bottom) + 74px));
       }
 
       .topBtn {
-        min-height: 45px;
+        min-height: 48px;
       }
 
       .orderItem {
@@ -329,14 +350,27 @@
       }
     }
 
-    @media (max-height: 520px) {
+    @media (max-height: 620px) {
       #toppingBar {
-        max-height: 34vh;
+        grid-template-columns: repeat(7, 1fr);
+        bottom: max(10px, env(safe-area-inset-bottom));
+        max-height: 33vh;
       }
 
       .topBtn {
-        min-height: 39px;
+        min-height: 42px;
         padding: 3px;
+      }
+    }
+
+    @media (max-height: 520px) {
+      #toppingBar {
+        max-height: 31vh;
+      }
+
+      .topBtn {
+        min-height: 38px;
+        padding: 2px;
       }
 
       #orderPanel {
@@ -739,8 +773,7 @@
 
         btn.appendChild(img);
 
-        btn.addEventListener("click", () => addTopping(name));
-        btn.addEventListener("touchstart", e => {
+        btn.addEventListener("pointerdown", e => {
           e.preventDefault();
           addTopping(name);
         }, { passive: false });
